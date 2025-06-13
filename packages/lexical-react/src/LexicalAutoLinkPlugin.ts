@@ -77,7 +77,7 @@ function findFirstMatch(
 
   return null;
 }
-
+// TODO yu 这里仅包含英文的分隔字符，应该增加更多语言，可以优化为可配置项，以支持传入
 const PUNCTUATION_OR_SPACE = /[.,;\s]/;
 
 function isSeparator(char: string): boolean {
@@ -177,7 +177,7 @@ function extractMatchingNodes(
     const currentNodeLength = currentNodeText.length;
     const currentNodeStart = currentOffset;
     const currentNodeEnd = currentOffset + currentNodeLength;
-
+    // 完全在匹配文本前后的文本节点放入 unmodified
     if (currentNodeEnd <= startIndex) {
       unmodifiedBeforeNodes.push(currentNode);
       matchingOffset += currentNodeLength;
@@ -226,6 +226,7 @@ function $createAutoLinkNode_(
     const firstTextNode = nodes[0];
     let offset = firstTextNode.getTextContent().length;
     let firstLinkTextNode;
+    // 取开头
     if (startIndex === 0) {
       firstLinkTextNode = firstTextNode;
     } else {
@@ -233,16 +234,20 @@ function $createAutoLinkNode_(
     }
     const linkNodes = [];
     let remainingTextNode;
+
     for (let i = 1; i < nodes.length; i++) {
       const currentNode = nodes[i];
       const currentNodeText = currentNode.getTextContent();
       const currentNodeLength = currentNodeText.length;
       const currentNodeStart = offset;
       const currentNodeEnd = offset + currentNodeLength;
+      // ? 这里的 if 判断似乎无意义
       if (currentNodeStart < endIndex) {
         if (currentNodeEnd <= endIndex) {
+          // 取中间部分
           linkNodes.push(currentNode);
         } else {
+          // 取结尾部分
           const [linkTextNode, endNode] = currentNode.splitText(
             endIndex - currentNodeStart,
           );
@@ -256,13 +261,16 @@ function $createAutoLinkNode_(
     const selectedTextNode = selection
       ? selection.getNodes().find($isTextNode)
       : undefined;
+    // 单独对 firstLinkTextNode 做处理
     const textNode = $createTextNode(firstLinkTextNode.getTextContent());
     textNode.setFormat(firstLinkTextNode.getFormat());
     textNode.setDetail(firstLinkTextNode.getDetail());
     textNode.setStyle(firstLinkTextNode.getStyle());
     linkNode.append(textNode, ...linkNodes);
+    // ? 从注释看起来如果光标不在 firstLinkTextNode 内，会自动保持光标位置
     // it does not preserve caret position if caret was at the first text node
     // so we need to restore caret position
+    // 恢复 firstLinkTextNode selection
     if (selectedTextNode && selectedTextNode === firstLinkTextNode) {
       if ($isRangeSelection(selection)) {
         textNode.select(selection.anchor.offset, selection.focus.offset);
@@ -293,6 +301,7 @@ function $handleLinkCreation(
     const matchStart = match.index;
     const matchLength = match.length;
     const matchEnd = matchStart + matchLength;
+    // 确保匹配的区间是一整段完整的词
     const isValid = isContentAroundIsValid(
       invalidMatchEnd + matchStart,
       invalidMatchEnd + matchEnd,
@@ -301,27 +310,35 @@ function $handleLinkCreation(
     );
 
     if (isValid) {
+      // matchingOffset 为开头至匹配到的文本节点之前的offset
       const [matchingOffset, , matchingNodes, unmodifiedAfterNodes] =
         extractMatchingNodes(
           currentNodes,
           invalidMatchEnd + matchStart,
           invalidMatchEnd + matchEnd,
         );
-
+      // actualMatchStart 为匹配到的文本节点中从开头到匹配到的文本开头的offset
+      // actualMatchStart 为匹配到的文本节点数组从开头到匹配到的文本结尾的offset
       const actualMatchStart = invalidMatchEnd + matchStart - matchingOffset;
       const actualMatchEnd = invalidMatchEnd + matchEnd - matchingOffset;
+      // 简单来说，是把 nodes 的 offset 换成 matchingNodes 的 offset
       const remainingTextNode = $createAutoLinkNode_(
         matchingNodes,
         actualMatchStart,
         actualMatchEnd,
         match,
       );
+      // 更新剩余的节点和offset
       currentNodes = remainingTextNode
         ? [remainingTextNode, ...unmodifiedAfterNodes]
         : unmodifiedAfterNodes;
       onChange(match.url, null);
       invalidMatchEnd = 0;
     } else {
+      // 匹配的文本周围没有分隔开，不满足自动链接的条件
+      // ? 没有很清楚的想明白为什么这里可以直接跳过整段匹配的字符串，似乎会产生遗漏情况
+      // 若放在场景里考虑，像链接和邮箱这样一大段的内容一般不会有从中间往后的字符可以重新匹配上
+      // 以及子片段可以匹配上的情况，符合实际需求
       invalidMatchEnd += matchEnd;
     }
 
@@ -339,6 +356,7 @@ function handleLinkEdit(
   const childrenLength = children.length;
   for (let i = 0; i < childrenLength; i++) {
     const child = children[i];
+    // 如果有 child 不为简单 TextNode 说明已失效
     if (!$isTextNode(child) || !child.isSimpleText()) {
       replaceWithChildren(linkNode);
       onChange(null, linkNode.getURL());
@@ -349,6 +367,7 @@ function handleLinkEdit(
   // Check text content fully matches
   const text = linkNode.getTextContent();
   const match = findFirstMatch(text, matchers);
+  // 如果无 match 说明已失效
   if (match === null || match.text !== text) {
     replaceWithChildren(linkNode);
     onChange(null, linkNode.getURL());
@@ -356,18 +375,21 @@ function handleLinkEdit(
   }
 
   // Check neighbors
+  // 相邻节点的变更也会使得节点 dirty，所以检查一下
   if (!isPreviousNodeValid(linkNode) || !isNextNodeValid(linkNode)) {
+    // 相邻节点与当前节点间没有有效分隔符 说明已失效
     replaceWithChildren(linkNode);
     onChange(null, linkNode.getURL());
     return;
   }
 
+  // 规则仍有效但内容变更了
   const url = linkNode.getURL();
   if (url !== match.url) {
     linkNode.setURL(match.url);
     onChange(match.url, url);
   }
-
+  // 检查 rel target 属性
   if (match.attributes) {
     const rel = linkNode.getRel();
     if (rel !== match.attributes.rel) {
@@ -410,6 +432,7 @@ function handleBadNeighbors(
     !nextSibling.getIsUnlinked() &&
     !endsWithSeparator(text)
   ) {
+    // ? 为什么调用 replaceWithChildren 后还要再调用 handleLinkEdit
     replaceWithChildren(nextSibling);
     handleLinkEdit(nextSibling, matchers, onChange);
     onChange(null, nextSibling.getURL());
@@ -472,12 +495,17 @@ function useAutoLink(
         if ($isAutoLinkNode(parent) && !parent.getIsUnlinked()) {
           handleLinkEdit(parent, matchers, onChangeWrapped);
         } else if (!$isLinkNode(parent)) {
+          // 1.为简单文本节点
+          // 2.开头为分隔符或前一个节点非 AutoLinkNode
+          // 如果前一个节点为 AutoLinkNode ，并且开头不是分隔符，则不需要重复处理
           if (
             textNode.isSimpleText() &&
             (startsWithSeparator(textNode.getTextContent()) ||
               !$isAutoLinkNode(previous))
           ) {
+            // 获得连续的、无空白字符的几个简单文本节点
             const textNodesToMatch = getTextNodesToMatch(textNode);
+            // 尝试生成 AutoLinkNode
             $handleLinkCreation(textNodesToMatch, matchers, onChangeWrapped);
           }
 
