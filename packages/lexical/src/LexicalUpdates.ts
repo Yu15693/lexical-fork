@@ -859,6 +859,7 @@ function processNestedUpdates(
         if (options.skipTransforms) {
           skipTransforms = true;
         }
+        // 检测到 discrete 配置，强制设置为同步执行
         if (options.discrete) {
           const pendingEditorState = editor._pendingEditorState;
           invariant(
@@ -914,6 +915,7 @@ function $beginUpdate(
     );
     editorStateWasCloned = true;
   }
+  // 关键：将 discrete 配置设置到 pendingEditorState._flushSync 中
   pendingEditorState._flushSync = discrete;
 
   const previousActiveEditorState = activeEditorState;
@@ -1023,9 +1025,11 @@ function $beginUpdate(
 
   if (shouldUpdate) {
     if (pendingEditorState._flushSync) {
+      // 同步执行：直接调用 $commitPendingUpdates
       pendingEditorState._flushSync = false;
       $commitPendingUpdates(editor);
     } else if (editorStateWasCloned) {
+      // 异步执行：使用 scheduleMicroTask 延迟执行
       scheduleMicroTask(() => {
         $commitPendingUpdates(editor);
       });

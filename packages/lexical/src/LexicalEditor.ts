@@ -1286,6 +1286,7 @@ export class LexicalEditor {
    * run synchronously.
    */
   update(updateFn: () => void, options?: EditorUpdateOptions): void {
+    // 当 options.discrete 为 true 时，强制设置为同步执行，否则放入微任务队列异步执行
     updateEditor(this, updateFn, options);
   }
 
