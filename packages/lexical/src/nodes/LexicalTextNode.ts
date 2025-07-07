@@ -922,7 +922,7 @@ export class TextNode extends LexicalNode {
    * This method is meant to be overridden by TextNode subclasses to control the behavior of those nodes
    * when a user event would cause text to be inserted before them in the editor. If true, Lexical will attempt
    * to insert text into this node. If false, it will insert the text in a new sibling node.
-   *
+   * * 不将新文本插入到当前节点中，保持节点独立性
    * @returns true if text can be inserted before the node, false otherwise.
    */
   canInsertTextBefore(): boolean {
@@ -1163,7 +1163,8 @@ export class TextNode extends LexicalNode {
    * This method is meant to be overridden by TextNode subclasses to control the behavior of those nodes
    * when used with the registerLexicalTextEntity function. If you're using registerLexicalTextEntity, the
    * node class that you create and replace matched text with should return true from this method.
-   *
+   * * 返回 true 时表示这个 node 是一个整体
+   * TODO yu 搞清楚 isTextEntity & registerLexicalTextEntity 的关系
    * @returns true if the node is to be treated as a "text entity", false otherwise.
    */
   isTextEntity(): boolean {
