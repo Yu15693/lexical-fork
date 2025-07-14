@@ -92,7 +92,8 @@ module.exports = {
           ERROR,
           {args: 'none', argsIgnorePattern: '^_', varsIgnorePattern: '^_'},
         ],
-        'header/header': [2, 'scripts/www/headerTemplate.js'],
+        // 暂时关闭版权头声明
+        'header/header': [OFF, 'scripts/www/headerTemplate.js'],
       },
     },
     {
@@ -187,8 +188,8 @@ module.exports = {
     'ft-flow/object-type-delimiter': OFF,
 
     'ft-flow/sort-keys': ERROR,
-
-    'header/header': [2, 'scripts/www/headerTemplate.js'],
+    // 暂时关闭版权头声明
+    'header/header': [OFF, 'scripts/www/headerTemplate.js'],
 
     // (This helps configure simple-import-sort) Make sure all imports are at the top of the file
     'import/first': ERROR,
