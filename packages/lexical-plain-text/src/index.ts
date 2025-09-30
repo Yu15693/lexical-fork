@@ -376,6 +376,7 @@ export function registerPlainText(editor: LexicalEditor): () => void {
         const selection = $getSelection();
 
         if (!$isRangeSelection(selection)) {
+          // 使用浏览器默认粘贴行为
           return false;
         }
 

@@ -6,12 +6,19 @@
  *
  */
 
+/**
+ * Babel 插件：转换 invariant() 错误消息
+ * 功能：
+ * 1. 开发环境 - 保留完整错误信息（包含上下文和参数）
+ * 2. 生产环境 - 替换为简化的错误代码（通过 codes.json 映射）
+ */
+
 'use strict';
 // @ts-check
 
 const fs = require('fs-extra');
-const ErrorMap = require('./ErrorMap');
-const evalToString = require('./evalToString');
+const ErrorMap = require('./ErrorMap'); // 错误代码映射表管理
+const evalToString = require('./evalToString'); // 计算错误消息字符串
 const helperModuleImports = require('@babel/helper-module-imports');
 const prettier = require('prettier');
 

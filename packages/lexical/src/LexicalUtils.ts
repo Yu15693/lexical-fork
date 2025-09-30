@@ -248,6 +248,7 @@ export function toggleTextFormatType(
   ) {
     return format;
   }
+  // 位运算 异或 实现 toggle
   let newFormat = format ^ activeFormat;
   if (type === 'subscript') {
     newFormat &= ~TEXT_TYPE_TO_FORMAT.superscript;

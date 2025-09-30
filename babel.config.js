@@ -12,6 +12,7 @@ module.exports = {
   plugins: [
     [
       require('./scripts/error-codes/transform-error-messages'),
+      // 禁用错误信息的压缩/简化处理
       {noMinify: true},
     ],
   ],
