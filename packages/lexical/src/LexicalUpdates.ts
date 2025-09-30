@@ -60,6 +60,7 @@ import {
   isLexicalEditor,
   removeDOMBlockCursorElement,
   scheduleMicroTask,
+  setPendingNodeToClone,
   updateDOMBlockCursorElement,
 } from './LexicalUtils';
 
@@ -422,6 +423,7 @@ export function parseEditorState(
   activeEditorState = editorState;
   isReadOnlyMode = false;
   activeEditor = editor;
+  setPendingNodeToClone(null);
 
   try {
     const registeredNodes = editor._nodes;
@@ -729,14 +731,16 @@ function triggerMutationListeners(
   const listenersLength = listeners.length;
 
   for (let i = 0; i < listenersLength; i++) {
-    const [listener, klass] = listeners[i];
-    const mutatedNodesByType = mutatedNodes.get(klass);
-    if (mutatedNodesByType !== undefined) {
-      listener(mutatedNodesByType, {
-        dirtyLeaves,
-        prevEditorState,
-        updateTags,
-      });
+    const [listener, klassSet] = listeners[i];
+    for (const klass of klassSet) {
+      const mutatedNodesByType = mutatedNodes.get(klass);
+      if (mutatedNodesByType !== undefined) {
+        listener(mutatedNodesByType, {
+          dirtyLeaves,
+          prevEditorState,
+          updateTags,
+        });
+      }
     }
   }
 }
@@ -836,7 +840,7 @@ function triggerDeferredUpdateCallbacks(
   }
 }
 
-function processNestedUpdates(
+function $processNestedUpdates(
   editor: LexicalEditor,
   initialSkipTransforms?: boolean,
 ): boolean {
@@ -850,6 +854,7 @@ function processNestedUpdates(
     const queuedUpdate = queuedUpdates.shift();
     if (queuedUpdate) {
       const [nextUpdateFn, options] = queuedUpdate;
+      const pendingEditorState = editor._pendingEditorState;
 
       let onUpdate;
 
@@ -861,7 +866,6 @@ function processNestedUpdates(
         }
         // 检测到 discrete 配置，强制设置为同步执行
         if (options.discrete) {
-          const pendingEditorState = editor._pendingEditorState;
           invariant(
             pendingEditorState !== null,
             'Unexpected empty pending editor state on discrete nested update',
@@ -876,7 +880,11 @@ function processNestedUpdates(
         addTags(editor, options.tag);
       }
 
-      nextUpdateFn();
+      if (pendingEditorState == null) {
+        $beginUpdate(editor, nextUpdateFn, options);
+      } else {
+        nextUpdateFn();
+      }
     }
   }
 
@@ -927,6 +935,7 @@ function $beginUpdate(
   editor._updating = true;
   activeEditor = editor;
   const headless = editor._headless || editor.getRootElement() === null;
+  setPendingNodeToClone(null);
 
   try {
     if (editorStateWasCloned) {
@@ -944,7 +953,7 @@ function $beginUpdate(
 
     const startingCompositionKey = editor._compositionKey;
     updateFn();
-    skipTransforms = processNestedUpdates(editor, skipTransforms);
+    skipTransforms = $processNestedUpdates(editor, skipTransforms);
     applySelectionTransforms(pendingEditorState, editor);
 
     if (editor._dirtyType !== NO_DIRTY_NODES) {
@@ -954,7 +963,7 @@ function $beginUpdate(
         $applyAllTransforms(pendingEditorState, editor);
       }
 
-      processNestedUpdates(editor);
+      $processNestedUpdates(editor);
       $garbageCollectDetachedNodes(
         currentEditorState,
         pendingEditorState,

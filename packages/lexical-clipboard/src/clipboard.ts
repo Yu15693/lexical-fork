@@ -10,14 +10,18 @@ import {$generateHtmlFromNodes, $generateNodesFromDOM} from '@lexical/html';
 import {$addNodeStyle, $sliceSelectedTextNodeContent} from '@lexical/selection';
 import {objectKlassEquals} from '@lexical/utils';
 import {
+  $caretFromPoint,
   $cloneWithProperties,
   $createTabNode,
+  $getCaretRange,
+  $getChildCaret,
   $getEditor,
   $getRoot,
   $getSelection,
   $isElementNode,
   $isRangeSelection,
   $isTextNode,
+  $isTextPointCaret,
   $parseSerializedNode,
   BaseSelection,
   COMMAND_PRIORITY_CRITICAL,
@@ -228,8 +232,47 @@ export function $insertGeneratedNodes(
     })
   ) {
     selection.insertNodes(nodes);
+    $updateSelectionOnInsert(selection);
   }
   return;
+}
+
+function $updateSelectionOnInsert(selection: BaseSelection): void {
+  if ($isRangeSelection(selection) && selection.isCollapsed()) {
+    const anchor = selection.anchor;
+    let nodeToInspect: LexicalNode | null = null;
+
+    const anchorCaret = $caretFromPoint(anchor, 'previous');
+    if (anchorCaret) {
+      if ($isTextPointCaret(anchorCaret)) {
+        nodeToInspect = anchorCaret.origin;
+      } else {
+        const range = $getCaretRange(
+          anchorCaret,
+          $getChildCaret($getRoot(), 'next').getFlipped(),
+        );
+        for (const caret of range) {
+          if ($isTextNode(caret.origin)) {
+            nodeToInspect = caret.origin;
+            break;
+          } else if ($isElementNode(caret.origin) && !caret.origin.isInline()) {
+            break;
+          }
+        }
+      }
+    }
+
+    if (nodeToInspect && $isTextNode(nodeToInspect)) {
+      const newFormat = nodeToInspect.getFormat();
+      const newStyle = nodeToInspect.getStyle();
+
+      if (selection.format !== newFormat || selection.style !== newStyle) {
+        selection.format = newFormat;
+        selection.style = newStyle;
+        selection.dirty = true;
+      }
+    }
+  }
 }
 
 export interface BaseSerializedNode {
@@ -425,7 +468,7 @@ export async function copyToClipboard(
 
   const rootElement = editor.getRootElement();
   const editorWindow = editor._window || window;
-  const windowDocument = window.document;
+  const windowDocument = editorWindow.document;
   const domSelection = getDOMSelection(editorWindow);
   if (rootElement === null || domSelection === null) {
     return false;
@@ -446,7 +489,7 @@ export async function copyToClipboard(
         if (objectKlassEquals(secondEvent, ClipboardEvent)) {
           removeListener();
           if (clipboardEventTimeout !== null) {
-            window.clearTimeout(clipboardEventTimeout);
+            editorWindow.clearTimeout(clipboardEventTimeout);
             clipboardEventTimeout = null;
           }
           resolve($copyToClipboardEvent(editor, secondEvent, data));
@@ -458,7 +501,7 @@ export async function copyToClipboard(
     );
     // If the above hack execCommand hack works, this timeout code should never fire. Otherwise,
     // the listener will be quickly freed so that the user can reuse it again
-    clipboardEventTimeout = window.setTimeout(() => {
+    clipboardEventTimeout = editorWindow.setTimeout(() => {
       removeListener();
       clipboardEventTimeout = null;
       resolve(false);
@@ -545,6 +588,11 @@ export function setLexicalClipboardDataTransfer(
   clipboardData: DataTransfer,
   data: LexicalClipboardData,
 ) {
+  for (const [k] of clipboardDataFunctions) {
+    if (data[k] === undefined) {
+      clipboardData.setData(k, '');
+    }
+  }
   for (const k in data) {
     const v = data[k as keyof LexicalClipboardData];
     if (v !== undefined) {

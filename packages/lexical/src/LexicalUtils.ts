@@ -21,18 +21,11 @@ import type {
 } from './LexicalEditor';
 import type {EditorState} from './LexicalEditorState';
 import type {
-  LexicalNode,
-  LexicalPrivateDOM,
-  NodeKey,
-  NodeMap,
-} from './LexicalNode';
-import type {
   BaseSelection,
   PointType,
   RangeSelection,
 } from './LexicalSelection';
 import type {RootNode} from './nodes/LexicalRootNode';
-import type {TextFormatType, TextNode} from './nodes/LexicalTextNode';
 
 import {CAN_USE_DOM} from 'shared/canUseDOM';
 import {IS_APPLE, IS_APPLE_WEBKIT, IS_IOS, IS_SAFARI} from 'shared/environment';
@@ -43,6 +36,7 @@ import {
   $createTextNode,
   $getPreviousSelection,
   $getSelection,
+  $getTextNodeOffset,
   $isDecoratorNode,
   $isElementNode,
   $isLineBreakNode,
@@ -64,11 +58,19 @@ import {
   DOM_TEXT_TYPE,
   HAS_DIRTY_NODES,
   LTR_REGEX,
+  PROTOTYPE_CONFIG_METHOD,
   RTL_REGEX,
   TEXT_TYPE_TO_FORMAT,
 } from './LexicalConstants';
 import {LexicalEditor} from './LexicalEditor';
 import {flushRootMutations} from './LexicalMutations';
+import {
+  LexicalNode,
+  type LexicalPrivateDOM,
+  type NodeKey,
+  type NodeMap,
+  type StaticNodeConfigValue,
+} from './LexicalNode';
 import {$normalizeSelection} from './LexicalNormalization';
 import {
   errorOnInfiniteTransforms,
@@ -79,10 +81,21 @@ import {
   isCurrentlyReadOnlyMode,
   triggerCommandListeners,
 } from './LexicalUpdates';
+import {type TextFormatType, TextNode} from './nodes/LexicalTextNode';
 
 export const emptyFunction = () => {
   return;
 };
+
+let pendingNodeToClone: null | LexicalNode = null;
+export function setPendingNodeToClone(pendingNode: null | LexicalNode): void {
+  pendingNodeToClone = pendingNode;
+}
+export function getPendingNodeToClone(): null | LexicalNode {
+  const node = pendingNodeToClone;
+  pendingNodeToClone = null;
+  return node;
+}
 
 let keyCounter = 1;
 
@@ -94,19 +107,33 @@ export function generateRandomKey(): string {
   return '' + keyCounter++;
 }
 
+/**
+ * @internal
+ */
 export function getRegisteredNodeOrThrow(
   editor: LexicalEditor,
   nodeType: string,
 ): RegisteredNode {
-  const registeredNode = editor._nodes.get(nodeType);
+  const registeredNode = getRegisteredNode(editor, nodeType);
   if (registeredNode === undefined) {
     invariant(false, 'registeredNode: Type %s not found', nodeType);
   }
   return registeredNode;
 }
 
+/**
+ * @internal
+ */
+export function getRegisteredNode(
+  editor: LexicalEditor,
+  nodeType: string,
+): undefined | RegisteredNode {
+  return editor._nodes.get(nodeType);
+}
+
 export const isArray = Array.isArray;
 
+/** @internal */
 export const scheduleMicroTask: (fn: () => void) => void =
   typeof queueMicrotask === 'function'
     ? queueMicrotask
@@ -152,7 +179,7 @@ export function isSelectionWithinEditor(
       !isSelectionCapturedInDecoratorInput(anchorDOM) &&
       getNearestEditorFromDOMNode(anchorDOM) === editor
     );
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -277,9 +304,11 @@ export function $setNodeKey(
   node: LexicalNode,
   existingKey: NodeKey | null | undefined,
 ): void {
+  const pendingNode = getPendingNodeToClone();
+  existingKey = existingKey || (pendingNode && pendingNode.__key);
   if (existingKey != null) {
     if (__DEV__) {
-      errorOnNodeKeyConstructorMismatch(node, existingKey);
+      errorOnNodeKeyConstructorMismatch(node, existingKey, pendingNode);
     }
     node.__key = existingKey;
     return;
@@ -304,6 +333,7 @@ export function $setNodeKey(
 function errorOnNodeKeyConstructorMismatch(
   node: LexicalNode,
   existingKey: NodeKey,
+  pendingNode: null | LexicalNode,
 ) {
   const editorState = internalGetActiveEditorState();
   if (!editorState) {
@@ -311,6 +341,16 @@ function errorOnNodeKeyConstructorMismatch(
     return;
   }
   const existingNode = editorState._nodeMap.get(existingKey);
+  if (pendingNode) {
+    invariant(
+      existingKey === pendingNode.__key,
+      'Lexical node with constructor %s (type %s) has an incorrect clone implementation, got %s for nodeKey when expecting %s',
+      node.constructor.name,
+      node.getType(),
+      String(existingKey),
+      pendingNode.__key,
+    );
+  }
   if (existingNode && existingNode.constructor !== node.constructor) {
     // Lifted condition to if statement because the inverted logic is a bit confusing
     if (node.constructor.name !== existingNode.constructor.name) {
@@ -619,13 +659,6 @@ export function $getNodeFromDOM(dom: Node): null | LexicalNode {
   return $getNodeByKey(nodeKey);
 }
 
-export function getTextNodeOffset(
-  node: TextNode,
-  moveSelectionToEnd: boolean,
-): number {
-  return moveSelectionToEnd ? node.getTextContentSize() : 0;
-}
-
 function getNodeKeyFromDOMTree(
   // Note that node here refers to a DOM Node, not an Lexical Node
   dom: Node,
@@ -787,7 +820,7 @@ export function $updateTextNodeFromDOMContent(
         anchorOffset === null ||
         focusOffset === null
       ) {
-        node.setTextContent(normalizedTextContent);
+        $setTextContentWithSelection(node, normalizedTextContent, selection);
         return;
       }
       selection.setTextNodeRange(node, anchorOffset, node, focusOffset);
@@ -798,7 +831,24 @@ export function $updateTextNodeFromDOMContent(
         node.replace(replacement);
         node = replacement;
       }
-      node.setTextContent(normalizedTextContent);
+      $setTextContentWithSelection(node, normalizedTextContent, selection);
+    }
+  }
+}
+
+function $setTextContentWithSelection(
+  node: TextNode,
+  textContent: string,
+  selection: BaseSelection | null,
+) {
+  node.setTextContent(textContent);
+  if ($isRangeSelection(selection)) {
+    const key = node.getKey();
+    for (const k of ['anchor', 'focus'] as const) {
+      const pt = selection[k];
+      if (pt.type === 'text' && pt.key === key) {
+        pt.offset = $getTextNodeOffset(node, pt.offset, 'clamp');
+      }
     }
   }
 }
@@ -1292,8 +1342,8 @@ export function getDOMOwnerDocument(
   return isDOMDocumentNode(target)
     ? target
     : isHTMLElement(target)
-    ? target.ownerDocument
-    : null;
+      ? target.ownerDocument
+      : null;
 }
 
 export function scrollIntoViewIfNeeded(
@@ -1471,8 +1521,8 @@ export function $copyNode<T extends LexicalNode>(node: T): T {
 
 export function $applyNodeReplacement<N extends LexicalNode>(node: N): N {
   const editor = getActiveEditor();
-  const nodeType = node.constructor.getType();
-  const registeredNode = editor._nodes.get(nodeType);
+  const nodeType = node.getType();
+  const registeredNode = getRegisteredNode(editor, nodeType);
   invariant(
     registeredNode !== undefined,
     '$applyNodeReplacement node %s with type %s must be registered to the editor. You can do this by passing the node class via the "nodes" array in the editor config.',
@@ -1716,23 +1766,6 @@ export function $splitNode(
   return [leftTree, rightTree];
 }
 
-export function $findMatchingParent(
-  startingNode: LexicalNode,
-  findFn: (node: LexicalNode) => boolean,
-): LexicalNode | null {
-  let curr: ElementNode | LexicalNode | null = startingNode;
-
-  while (curr !== $getRoot() && curr != null) {
-    if (findFn(curr)) {
-      return curr;
-    }
-
-    curr = curr.getParent();
-  }
-
-  return null;
-}
-
 /**
  * @param x - The element being tested
  * @returns Returns true if x is an HTML anchor tag, false otherwise
@@ -1829,17 +1862,6 @@ export function INTERNAL_$isBlock(
   return !node.isInline() && node.canBeEmpty() !== false && isLeafElement;
 }
 
-export function $getAncestor<NodeType extends LexicalNode = LexicalNode>(
-  node: LexicalNode,
-  predicate: (ancestor: LexicalNode) => ancestor is NodeType,
-): NodeType | null {
-  let parent = node;
-  while (parent !== null && parent.getParent() !== null && !predicate(parent)) {
-    parent = parent.getParentOrThrow();
-  }
-  return predicate(parent) ? parent : null;
-}
-
 /**
  * Utility function for accessing current active editor instance.
  * @returns Current active editor
@@ -1904,7 +1926,7 @@ function computeTypeToNodeMap(editorState: EditorState): TypeToNodeMap {
  * do not try and use this function to duplicate or copy an existing node.
  *
  * Does not mutate the EditorState.
- * @param node - The node to be cloned.
+ * @param latestNode - The node to be cloned.
  * @returns The clone of the node.
  */
 export function $cloneWithProperties<T extends LexicalNode>(latestNode: T): T {
@@ -1959,3 +1981,194 @@ export function isDOMUnmanaged(elementDom: Node): boolean {
   const el: Node & LexicalPrivateDOM = elementDom;
   return el.__lexicalUnmanaged === true;
 }
+
+/**
+ * @internal
+ *
+ * Object.hasOwn ponyfill
+ */
+function hasOwn(o: object, k: string): boolean {
+  return Object.prototype.hasOwnProperty.call(o, k);
+}
+
+/**
+ * @internal
+ */
+export function hasOwnStaticMethod(
+  klass: Klass<LexicalNode>,
+  k: keyof Klass<LexicalNode>,
+): boolean {
+  return hasOwn(klass, k) && klass[k] !== LexicalNode[k];
+}
+
+/**
+ * @internal
+ */
+export function hasOwnExportDOM(klass: Klass<LexicalNode>) {
+  return hasOwn(klass.prototype, 'exportDOM');
+}
+
+/** @internal */
+function isAbstractNodeClass(klass: Klass<LexicalNode>): boolean {
+  if (!(klass === LexicalNode || klass.prototype instanceof LexicalNode)) {
+    let ownNodeType = '<unknown>';
+    let version = '<unknown>';
+    try {
+      ownNodeType = klass.getType();
+    } catch (_err) {
+      // ignore
+    }
+    try {
+      if (LexicalEditor.version) {
+        version = JSON.parse(LexicalEditor.version);
+      }
+    } catch (_err) {
+      // ignore
+    }
+    invariant(
+      false,
+      '%s (type %s) does not subclass LexicalNode from the lexical package used by this editor (version %s). All lexical and @lexical/* packages used by an editor must have identical versions. If you suspect the version does match, then the problem may be caused by multiple copies of the same lexical module (e.g. both esm and cjs, or included directly in multiple entrypoints).',
+      klass.name,
+      ownNodeType,
+      version,
+    );
+  }
+  return (
+    klass === DecoratorNode || klass === ElementNode || klass === LexicalNode
+  );
+}
+
+/** @internal */
+export function getStaticNodeConfig(klass: Klass<LexicalNode>): {
+  ownNodeType: undefined | string;
+  ownNodeConfig: undefined | StaticNodeConfigValue<LexicalNode, string>;
+} {
+  const nodeConfigRecord =
+    PROTOTYPE_CONFIG_METHOD in klass.prototype
+      ? klass.prototype[PROTOTYPE_CONFIG_METHOD]()
+      : undefined;
+  const isAbstract = isAbstractNodeClass(klass);
+  const nodeType =
+    !isAbstract && hasOwnStaticMethod(klass, 'getType')
+      ? klass.getType()
+      : undefined;
+  let ownNodeConfig: undefined | StaticNodeConfigValue<LexicalNode, string>;
+  let ownNodeType = nodeType;
+  if (nodeConfigRecord) {
+    if (nodeType) {
+      ownNodeConfig = nodeConfigRecord[nodeType];
+    } else {
+      for (const [k, v] of Object.entries(nodeConfigRecord)) {
+        ownNodeType = k;
+        ownNodeConfig = v;
+      }
+    }
+  }
+  if (!isAbstract && ownNodeType) {
+    if (!hasOwnStaticMethod(klass, 'getType')) {
+      klass.getType = () => ownNodeType;
+    }
+    if (!hasOwnStaticMethod(klass, 'clone')) {
+      // TextNode.length > 0 will only be true if the compiler output
+      // is not ES6 compliant, in which case we can not provide this
+      // warning
+      if (__DEV__ && TextNode.length === 0) {
+        invariant(
+          klass.length === 0,
+          '%s (type %s) must implement a static clone method since its constructor has %s required arguments (expecting 0). Use an explicit default in the first argument of your constructor(prop: T=X, nodeKey?: NodeKey).',
+          klass.name,
+          ownNodeType,
+          String(klass.length),
+        );
+      }
+      klass.clone = (prevNode: LexicalNode) => {
+        setPendingNodeToClone(prevNode);
+        return new klass();
+      };
+    }
+    if (!hasOwnStaticMethod(klass, 'importJSON')) {
+      if (__DEV__ && TextNode.length === 0) {
+        invariant(
+          klass.length === 0,
+          '%s (type %s) must implement a static importJSON method since its constructor has %s required arguments (expecting 0). Use an explicit default in the first argument of your constructor(prop: T=X, nodeKey?: NodeKey).',
+          klass.name,
+          ownNodeType,
+          String(klass.length),
+        );
+      }
+      klass.importJSON =
+        (ownNodeConfig && ownNodeConfig.$importJSON) ||
+        ((serializedNode) => new klass().updateFromJSON(serializedNode));
+    }
+    if (!hasOwnStaticMethod(klass, 'importDOM') && ownNodeConfig) {
+      const {importDOM} = ownNodeConfig;
+      if (importDOM) {
+        klass.importDOM = () => importDOM;
+      }
+    }
+  }
+  return {ownNodeConfig, ownNodeType};
+}
+
+/**
+ * Create an node from its class.
+ *
+ * Note that this will directly construct the final `withKlass` node type,
+ * and will ignore the deprecated `with` functions. This allows `$create` to
+ * skip any intermediate steps where the replaced node would be created and
+ * then immediately discarded (once per configured replacement of that node).
+ *
+ * This does not support any arguments to the constructor.
+ * Setters can be used to initialize your node, and they can
+ * be chained. You can of course write your own mutliple-argument functions
+ * to wrap that.
+ *
+ * @example
+ * ```ts
+ * function $createTokenText(text: string): TextNode {
+ *   return $create(TextNode).setTextContent(text).setMode('token');
+ * }
+ * ```
+ */
+export function $create<T extends LexicalNode>(klass: Klass<T>): T {
+  const editor = $getEditor();
+  errorOnReadOnly();
+  const registeredNode = editor.resolveRegisteredNodeAfterReplacements(
+    editor.getRegisteredNode(klass),
+  );
+  return new registeredNode.klass() as T;
+}
+
+/**
+ * Starts with a node and moves up the tree (toward the root node) to find a matching node based on
+ * the search parameters of the findFn. (Consider JavaScripts' .find() function where a testing function must be
+ * passed as an argument. eg. if( (node) => node.__type === 'div') ) return true; otherwise return false
+ * @param startingNode - The node where the search starts.
+ * @param findFn - A testing function that returns true if the current node satisfies the testing parameters.
+ * @returns `startingNode` or one of its ancestors that matches the `findFn` predicate and is not the `RootNode`, or `null` if no match was found.
+ */
+export const $findMatchingParent: {
+  <T extends LexicalNode>(
+    startingNode: LexicalNode,
+    findFn: (node: LexicalNode) => node is T,
+  ): T | null;
+  (
+    startingNode: LexicalNode,
+    findFn: (node: LexicalNode) => boolean,
+  ): LexicalNode | null;
+} = (
+  startingNode: LexicalNode,
+  findFn: (node: LexicalNode) => boolean,
+): LexicalNode | null => {
+  let curr: ElementNode | LexicalNode | null = startingNode;
+
+  while (curr != null && !$isRootNode(curr)) {
+    if (findFn(curr)) {
+      return curr;
+    }
+
+    curr = curr.getParent();
+  }
+
+  return null;
+};
