@@ -6,6 +6,49 @@
  *
  */
 
+/**
+ * 【学习重点】ToolbarPlugin - 工具栏插件
+ *
+ * 这是 Playground 中最复杂的插件之一，展示了如何：
+ * 1. 监听选区变化并更新工具栏状态
+ * 2. 使用命令系统执行格式化操作
+ * 3. 实现撤销/重做功能
+ * 4. 实现各种文本格式化（粗体、斜体、下划线等）
+ * 5. 实现块级格式化（标题、列表、引用等）
+ * 6. 实现插入功能（图片、表格、链接等）
+ *
+ * 核心技术点：
+ *
+ * 1. 选区监听：
+ *    editor.registerCommand(SELECTION_CHANGE_COMMAND, ...)
+ *    - 当选区变化时更新工具栏按钮状态
+ *
+ * 2. 格式化命令：
+ *    editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')
+ *    - 使用命令系统执行格式化
+ *
+ * 3. 历史命令：
+ *    editor.dispatchCommand(UNDO_COMMAND)
+ *    editor.dispatchCommand(REDO_COMMAND)
+ *
+ * 4. 状态读取：
+ *    $getSelection() - 获取当前选区
+ *    $isRangeSelection() - 判断是否为范围选区
+ *    selection.hasFormat('bold') - 检查格式状态
+ *
+ * 5. 样式操作：
+ *    $patchStyleText(selection, {color: '#ff0000'})
+ *    $getSelectionStyleValueForProperty(selection, 'color')
+ *
+ * 工具栏功能分组：
+ * - 历史操作：撤销、重做
+ * - 块级格式：段落、标题、列表、引用、代码块
+ * - 文本格式：粗体、斜体、下划线、删除线、代码、链接
+ * - 文本样式：字体大小、颜色、背景色
+ * - 对齐方式：左对齐、居中、右对齐、两端对齐
+ * - 插入功能：图片、表格、分割线、折叠面板等
+ */
+
 import type {JSX} from 'react';
 
 import {

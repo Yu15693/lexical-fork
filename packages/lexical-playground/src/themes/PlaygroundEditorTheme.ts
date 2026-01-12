@@ -6,10 +6,58 @@
  *
  */
 
+/**
+ * 【学习重点】PlaygroundEditorTheme.ts - 编辑器主题配置
+ *
+ * Lexical 使用主题对象来定义各种节点的 CSS 类名。
+ * 这种方式将样式与逻辑分离，便于自定义编辑器外观。
+ *
+ * 主题配置结构：
+ * - 每个键对应一种节点类型或状态
+ * - 值是 CSS 类名字符串
+ * - 支持嵌套对象（如 heading.h1, text.bold）
+ *
+ * 主要配置项：
+ *
+ * 1. 文本格式 (text):
+ *    - bold, italic, underline, strikethrough
+ *    - code, highlight, subscript, superscript
+ *
+ * 2. 块级元素:
+ *    - paragraph: 段落
+ *    - heading: 标题 (h1-h6)
+ *    - quote: 引用块
+ *    - code: 代码块
+ *    - list: 列表
+ *
+ * 3. 特殊元素:
+ *    - link: 链接
+ *    - hashtag: 话题标签
+ *    - table: 表格相关
+ *    - image: 图片
+ *    - hr: 水平分割线
+ *
+ * 4. 编辑器状态:
+ *    - ltr/rtl: 文本方向
+ *    - indent: 缩进
+ *    - blockCursor: 块级光标
+ *
+ * 使用方式：
+ * ```ts
+ * const editor = createEditor({
+ *   theme: PlaygroundEditorTheme,
+ *   // ...
+ * });
+ * ```
+ *
+ * 对应的 CSS 文件：PlaygroundEditorTheme.css
+ */
+
 import type {EditorThemeClasses} from 'lexical';
 
 import './PlaygroundEditorTheme.css';
 
+/** 编辑器主题配置对象 */
 const theme: EditorThemeClasses = {
   autocomplete: 'PlaygroundEditorTheme__autocomplete',
   blockCursor: 'PlaygroundEditorTheme__blockCursor',

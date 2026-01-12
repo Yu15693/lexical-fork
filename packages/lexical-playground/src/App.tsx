@@ -6,6 +6,28 @@
  *
  */
 
+/**
+ * 【学习重点】App.tsx - Playground 应用的根组件
+ *
+ * 这个文件是整个 Playground 应用的入口，展示了如何：
+ * 1. 配置和初始化 Lexical 编辑器
+ * 2. 组织 Context Provider 层级结构
+ * 3. 预填充编辑器内容
+ * 4. 自定义 DOM 导入逻辑
+ *
+ * 组件层级结构：
+ * PlaygroundApp
+ * └── SettingsContext (设置状态管理)
+ *     └── FlashMessageContext (消息提示)
+ *         └── App
+ *             └── LexicalCollaboration (协作功能)
+ *                 └── LexicalExtensionComposer (编辑器初始化)
+ *                     └── SharedHistoryContext (历史记录共享)
+ *                         └── TableContext (表格状态)
+ *                             └── ToolbarContext (工具栏状态)
+ *                                 └── Editor (主编辑器组件)
+ */
+
 import {$createLinkNode} from '@lexical/link';
 import {$createListItemNode, $createListNode} from '@lexical/list';
 import {LexicalCollaboration} from '@lexical/react/LexicalCollaborationContext';
@@ -44,9 +66,25 @@ console.warn(
   'If you are profiling the playground app, please ensure you turn off the debug view. You can disable it by pressing on the settings control in the bottom-left of your screen and toggling the debug view setting.',
 );
 
+/**
+ * 【学习重点】$prepopulatedRichText - 预填充编辑器内容
+ *
+ * 这个函数展示了如何使用 $ 前缀函数创建和组织节点：
+ * 1. $getRoot() - 获取根节点
+ * 2. $createHeadingNode() - 创建标题节点
+ * 3. $createTextNode() - 创建文本节点
+ * 4. $createQuoteNode() - 创建引用块
+ * 5. $createParagraphNode() - 创建段落
+ * 6. $createListNode() / $createListItemNode() - 创建列表
+ * 7. $createLinkNode() - 创建链接
+ *
+ * 注意：所有 $ 前缀函数只能在 editor.update() 回调中使用
+ */
 function $prepopulatedRichText() {
   const root = $getRoot();
+  // 只有当编辑器为空时才预填充内容
   if (root.getFirstChild() === null) {
+    // 创建 h1 标题
     const heading = $createHeadingNode('h1');
     heading.append($createTextNode('Welcome to the playground'));
     root.append(heading);

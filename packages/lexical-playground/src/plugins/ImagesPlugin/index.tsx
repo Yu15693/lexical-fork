@@ -6,6 +6,39 @@
  *
  */
 
+/**
+ * 【学习重点】ImagesPlugin - 图片插件
+ *
+ * 这个插件展示了如何实现图片插入功能，包括：
+ * 1. 创建自定义命令 (INSERT_IMAGE_COMMAND)
+ * 2. 处理拖拽上传
+ * 3. 处理粘贴上传
+ * 4. 处理文件选择上传
+ * 5. 处理 URL 插入
+ *
+ * 核心技术点：
+ *
+ * 1. 自定义命令：
+ *    const INSERT_IMAGE_COMMAND = createCommand('INSERT_IMAGE_COMMAND');
+ *    editor.registerCommand(INSERT_IMAGE_COMMAND, handler, priority);
+ *    editor.dispatchCommand(INSERT_IMAGE_COMMAND, payload);
+ *
+ * 2. 拖拽处理：
+ *    editor.registerCommand(DRAGSTART_COMMAND, ...)
+ *    editor.registerCommand(DRAGOVER_COMMAND, ...)
+ *    editor.registerCommand(DROP_COMMAND, ...)
+ *
+ * 3. 节点插入：
+ *    const imageNode = $createImageNode(payload);
+ *    $insertNodes([imageNode]);
+ *
+ * 4. 文件读取：
+ *    const reader = new FileReader();
+ *    reader.readAsDataURL(file);
+ *
+ * 配合 ImageNode 使用，实现完整的图片功能
+ */
+
 import type {JSX} from 'react';
 
 import {

@@ -6,6 +6,32 @@
  *
  */
 
+/**
+ * 【学习重点】MentionsPlugin - @提及插件
+ *
+ * 这是一个典型的 Typeahead（输入提示）插件示例，展示了如何：
+ * 1. 监听用户输入的触发字符（@）
+ * 2. 显示候选列表供用户选择
+ * 3. 将选中的选项转换为自定义节点
+ *
+ * 核心组件：
+ * - LexicalTypeaheadMenuPlugin: 官方提供的 Typeahead 基础插件
+ * - useBasicTypeaheadTriggerMatch: 触发匹配的 Hook
+ * - MenuOption: 菜单选项的基类
+ *
+ * 实现流程：
+ * 1. 定义触发正则表达式（检测 @ 字符）
+ * 2. 实现查询函数（根据输入搜索候选项）
+ * 3. 实现选择回调（将选中项转换为 MentionNode）
+ * 4. 渲染候选列表 UI
+ *
+ * 这个模式可以用于实现：
+ * - @提及用户
+ * - #话题标签
+ * - /斜杠命令
+ * - 表情符号选择器
+ */
+
 import type {JSX} from 'react';
 
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
@@ -22,6 +48,7 @@ import * as ReactDOM from 'react-dom';
 
 import {$createMentionNode} from '../../nodes/MentionNode';
 
+// 标点符号正则表达式
 const PUNCTUATION =
   '\\.,\\+\\*\\?\\$\\@\\|#{}\\(\\)\\^\\-\\[\\]\\\\/!%\'"~=<>_:;';
 const NAME = '\\b[A-Z][^\\s' + PUNCTUATION + ']';
@@ -33,6 +60,7 @@ const DocumentMentionsRegex = {
 
 const PUNC = DocumentMentionsRegex.PUNCTUATION;
 
+// 触发字符：@ 符号
 const TRIGGERS = ['@'].join('');
 
 // Chars we expect to see in a mention (non-space, non-punctuation).
