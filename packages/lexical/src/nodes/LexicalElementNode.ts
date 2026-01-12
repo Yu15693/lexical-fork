@@ -306,28 +306,57 @@ export function indexPath(root: HTMLElement, child: Node): number[] {
   return path.reverse();
 }
 
-/** @noInheritDoc */
+/**
+ * 【学习重点】ElementNode - 容器节点的基类
+ *
+ * ElementNode 是所有可以包含子节点的节点的基类。
+ * 常见的 ElementNode 子类包括：
+ * - RootNode: 编辑器的根节点
+ * - ParagraphNode: 段落
+ * - HeadingNode: 标题 (h1-h6)
+ * - ListNode: 列表容器
+ * - ListItemNode: 列表项
+ * - QuoteNode: 引用块
+ * - CodeNode: 代码块
+ *
+ * 子节点通过双向链表管理：
+ * - __first: 第一个子节点的 key
+ * - __last: 最后一个子节点的 key
+ * - __size: 子节点数量
+ *
+ * 创建自定义 ElementNode：
+ * ```ts
+ * class MyContainerNode extends ElementNode {
+ *   static getType() { return 'my-container'; }
+ *   static clone(node) { return new MyContainerNode(node.__key); }
+ *   createDOM() { return document.createElement('div'); }
+ *   updateDOM() { return false; }
+ * }
+ * ```
+ *
+ * @noInheritDoc
+ */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class ElementNode extends LexicalNode {
   /** @internal */
   declare ['constructor']: KlassConstructor<typeof ElementNode>;
-  /** @internal */
+  /** @internal 第一个子节点的 key */
   __first: null | NodeKey;
-  /** @internal */
+  /** @internal 最后一个子节点的 key */
   __last: null | NodeKey;
-  /** @internal */
+  /** @internal 子节点数量 */
   __size: number;
-  /** @internal */
+  /** @internal 对齐格式（左对齐、居中、右对齐等） */
   __format: number;
-  /** @internal */
+  /** @internal CSS 样式字符串 */
   __style: string;
-  /** @internal */
+  /** @internal 缩进级别 */
   __indent: number;
-  /** @internal */
+  /** @internal 文本方向（ltr/rtl） */
   __dir: 'ltr' | 'rtl' | null;
-  /** @internal */
+  /** @internal 继承的文本格式 */
   __textFormat: number;
-  /** @internal */
+  /** @internal 继承的文本样式 */
   __textStyle: string;
 
   constructor(key?: NodeKey) {

@@ -381,21 +381,51 @@ export type DOMExportOutput = {
 
 export type NodeKey = string;
 
+/**
+ * 【学习重点】LexicalNode - 所有节点的基类
+ *
+ * Lexical 中的所有内容都由节点组成。LexicalNode 是所有节点类型的基类。
+ *
+ * 核心概念：
+ * 1. 节点是不可变的 - 修改节点需要调用 getWritable() 获取可写副本
+ * 2. 每个节点有唯一的 key - 用于在节点树中标识节点
+ * 3. 节点通过 __parent, __prev, __next 形成链表结构
+ *
+ * 主要节点类型继承关系：
+ * LexicalNode
+ * ├── ElementNode (容器节点，可包含子节点)
+ * │   ├── RootNode (根节点)
+ * │   ├── ParagraphNode (段落)
+ * │   ├── HeadingNode (标题)
+ * │   └── ListNode, ListItemNode (列表)
+ * ├── TextNode (文本节点)
+ * │   └── HashtagNode, MentionNode 等
+ * ├── LineBreakNode (换行)
+ * ├── TabNode (制表符)
+ * └── DecoratorNode (装饰器节点，用于嵌入 React 组件等)
+ *
+ * 创建自定义节点需要：
+ * 1. 继承合适的基类（通常是 ElementNode 或 TextNode）
+ * 2. 实现 static getType() 返回唯一类型标识
+ * 3. 实现 static clone() 用于克隆节点
+ * 4. 实现 createDOM() 和 updateDOM() 用于 DOM 渲染
+ * 5. 实现 importJSON() 和 exportJSON() 用于序列化
+ */
 export class LexicalNode {
   /** @internal Allow us to look up the type including static props */
   declare ['constructor']: KlassConstructor<typeof LexicalNode>;
-  /** @internal */
+  /** @internal 节点类型标识，由 getType() 返回 */
   __type: string;
-  /** @internal */
+  /** @internal 节点的唯一标识符 */
   //@ts-ignore We set the key in the constructor.
   __key: string;
-  /** @internal */
+  /** @internal 父节点的 key */
   __parent: null | NodeKey;
-  /** @internal */
+  /** @internal 前一个兄弟节点的 key */
   __prev: null | NodeKey;
-  /** @internal */
+  /** @internal 后一个兄弟节点的 key */
   __next: null | NodeKey;
-  /** @internal */
+  /** @internal 节点状态（实验性功能） */
   __state?: NodeState<this>;
 
   // Flow doesn't support abstract classes unfortunately, so we can't _force_
@@ -974,6 +1004,15 @@ export class LexicalNode {
    * Returns the latest version of the node from the active EditorState.
    * This is used to avoid getting values from stale node references.
    *
+   * 【学习重点】getLatest() - 获取节点的最新版本
+   *
+   * 由于 Lexical 使用不可变数据结构，节点引用可能会过时。
+   * 在读取节点属性前，应该调用 getLatest() 确保获取最新状态。
+   *
+   * 示例：
+   * const node = $getNodeByKey(key);
+   * const latestNode = node.getLatest();
+   * const text = latestNode.getTextContent(); // 获取最新的文本内容
    */
   getLatest(): this {
     const latest = $getNodeByKey<this>(this.__key);
@@ -991,6 +1030,23 @@ export class LexicalNode {
    * if necessary. Will throw an error if called outside of a Lexical Editor
    * {@link LexicalEditor.update} callback.
    *
+   * 【学习重点】getWritable() - 获取节点的可写版本
+   *
+   * Lexical 节点默认是不可变的。要修改节点，必须：
+   * 1. 在 editor.update() 回调中
+   * 2. 调用 getWritable() 获取可写副本
+   * 3. 修改可写副本的属性
+   *
+   * 内部机制：
+   * - 如果节点已经是可写的，直接返回
+   * - 否则克隆节点，将克隆版本放入 nodeMap，返回克隆版本
+   *
+   * 示例：
+   * editor.update(() => {
+   *   const node = $getNodeByKey(key);
+   *   const writable = node.getWritable();
+   *   writable.__text = 'new text'; // 修改可写副本
+   * });
    */
   getWritable(): this {
     errorOnReadOnly();

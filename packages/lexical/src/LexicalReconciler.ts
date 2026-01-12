@@ -756,6 +756,30 @@ function $reconcileNodeChildren(
   }
 }
 
+/**
+ * 【学习重点】$reconcileRoot - DOM 协调的入口函数
+ *
+ * 这是 Lexical 的核心协调算法，负责将虚拟节点树同步到真实 DOM。
+ * 类似于 React 的 reconciliation，但针对富文本编辑器优化。
+ *
+ * 协调过程：
+ * 1. 设置模块级变量（避免递归传参）
+ * 2. 从根节点开始递归协调 ($reconcileNode)
+ * 3. 对于每个脏节点：
+ *    - 如果是新节点：创建 DOM ($createNode)
+ *    - 如果是已有节点：更新 DOM (updateDOM)
+ *    - 如果节点被删除：销毁 DOM (destroyNode)
+ * 4. 记录变化的节点用于触发 mutation 监听器
+ * 5. 清理模块级变量防止内存泄漏
+ *
+ * @param prevEditorState - 上一个编辑器状态
+ * @param nextEditorState - 新的编辑器状态
+ * @param editor - 编辑器实例
+ * @param dirtyType - 脏节点类型（0=无, 1=部分, 2=全部）
+ * @param dirtyElements - 脏的元素节点
+ * @param dirtyLeaves - 脏的叶子节点
+ * @returns 变化的节点映射，用于触发 mutation 监听器
+ */
 export function $reconcileRoot(
   prevEditorState: EditorState,
   nextEditorState: EditorState,
@@ -764,12 +788,11 @@ export function $reconcileRoot(
   dirtyElements: Map<NodeKey, IntentionallyMarkedAsDirtyElement>,
   dirtyLeaves: Set<NodeKey>,
 ): MutatedNodes {
-  // We cache text content to make retrieval more efficient.
-  // The cache must be rebuilt during reconciliation to account for any changes.
+  // 缓存文本内容以提高检索效率
+  // 协调过程中必须重建缓存以反映任何变化
   subTreeTextContent = '';
   editorTextContent = '';
-  // Rather than pass around a load of arguments through the stack recursively
-  // we instead set them as bindings within the scope of the module.
+  // 将参数设置为模块级变量，避免递归传参
   treatAllNodesAsDirty = dirtyType === FULL_RECONCILE;
   activeEditor = editor;
   activeEditorConfig = editor._config;
@@ -781,10 +804,10 @@ export function $reconcileRoot(
   activeNextNodeMap = nextEditorState._nodeMap;
   activeEditorStateReadOnly = nextEditorState._readOnly;
   activePrevKeyToDOMMap = new Map(editor._keyToDOMMap);
-  // We keep track of mutated nodes so we can trigger mutation
-  // listeners later in the update cycle.
+  // 跟踪变化的节点，用于稍后触发 mutation 监听器
   const currentMutatedNodes = new Map();
   mutatedNodes = currentMutatedNodes;
+  // 从根节点开始递归协调
   $reconcileNode('root', null);
   // We don't want a bunch of void checks throughout the scope
   // so instead we make it seem that these values are always set.

@@ -83,17 +83,50 @@ export type SerializedImageNode = Spread<
   SerializedLexicalNode
 >;
 
+/**
+ * 【学习重点】ImageNode - 自定义装饰器节点示例
+ *
+ * 这是一个典型的 DecoratorNode 实现，展示了如何：
+ * 1. 创建自定义节点类型
+ * 2. 存储自定义属性（src, altText, width, height 等）
+ * 3. 使用 React 组件渲染节点内容
+ * 4. 实现序列化/反序列化（importJSON/exportJSON）
+ * 5. 实现 DOM 导入/导出（importDOM/exportDOM）
+ *
+ * DecoratorNode 特点：
+ * - 可以渲染任意 React 组件
+ * - 在编辑器中表现为不可编辑的块
+ * - 适合嵌入图片、视频、代码块等复杂内容
+ *
+ * 创建自定义 DecoratorNode 的步骤：
+ * 1. 继承 DecoratorNode<T>，T 是 decorate() 返回的类型
+ * 2. 实现 static getType() 返回唯一类型标识
+ * 3. 实现 static clone() 用于克隆节点
+ * 4. 实现 createDOM() 创建容器 DOM
+ * 5. 实现 decorate() 返回 React 组件
+ * 6. 实现 importJSON/exportJSON 用于序列化
+ */
 export class ImageNode extends DecoratorNode<JSX.Element> {
+  /** 图片 URL */
   __src: string;
+  /** 替代文本 */
   __altText: string;
+  /** 宽度 */
   __width: 'inherit' | number;
+  /** 高度 */
   __height: 'inherit' | number;
+  /** 最大宽度 */
   __maxWidth: number;
+  /** 是否显示标题 */
   __showCaption: boolean;
+  /** 标题编辑器（嵌套编辑器） */
   __caption: LexicalEditor;
-  // Captions cannot yet be used within editor cells
+  /** 是否启用标题功能 */
   __captionsEnabled: boolean;
 
+  /**
+   * 返回节点类型标识，必须唯一
+   */
   static getType(): string {
     return 'image';
   }

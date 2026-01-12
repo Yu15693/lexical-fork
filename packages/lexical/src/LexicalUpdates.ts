@@ -502,6 +502,23 @@ function handleDEVOnlyPendingUpdateGuarantees(
   };
 }
 
+/**
+ * 【学习重点】$commitPendingUpdates - 提交待处理的更新
+ *
+ * 这是 Lexical 更新机制的核心函数，负责将待处理的编辑器状态同步到 DOM。
+ *
+ * 主要流程：
+ * 1. 检查是否有待处理的状态 (pendingEditorState)
+ * 2. 如果有脏节点，执行 DOM 协调 ($reconcileRoot)
+ * 3. 更新 DOM 选区
+ * 4. 触发各类监听器（mutation, update, decorator, textcontent）
+ * 5. 处理延迟回调
+ *
+ * 协调过程会：
+ * - 比较新旧状态的节点树
+ * - 创建、更新或删除 DOM 节点
+ * - 更新装饰器节点的渲染
+ */
 export function $commitPendingUpdates(
   editor: LexicalEditor,
   recoveryEditorState?: EditorState,
@@ -516,6 +533,7 @@ export function $commitPendingUpdates(
 
   // ======
   // Reconciliation has started.
+  // 协调过程开始
   // ======
 
   const currentEditorState = editor._editorState;
@@ -1059,6 +1077,9 @@ function $beginUpdate(
  * to the same editor, much like if it was an editor.dispatchCommand issued
  * within an update
  */
+/**
+ * 同步执行编辑器更新（内部使用）
+ */
 export function updateEditorSync(
   editor: LexicalEditor,
   updateFn: () => void,
@@ -1071,14 +1092,34 @@ export function updateEditorSync(
   }
 }
 
+/**
+ * 【学习重点】updateEditor - 执行编辑器更新的入口函数
+ *
+ * 这是 editor.update() 方法的内部实现。
+ *
+ * 更新机制：
+ * 1. 如果编辑器正在更新中，将新的更新加入队列
+ * 2. 否则立即开始更新流程 ($beginUpdate)
+ *
+ * $beginUpdate 的流程：
+ * 1. 克隆当前 EditorState 创建可写副本
+ * 2. 设置活动编辑器和状态上下文
+ * 3. 执行 updateFn 回调
+ * 4. 运行节点 transforms（可能触发多轮）
+ * 5. 规范化文本节点
+ * 6. 垃圾回收分离的节点
+ * 7. 提交更新 ($commitPendingUpdates)
+ */
 export function updateEditor(
   editor: LexicalEditor,
   updateFn: () => void,
   options?: EditorUpdateOptions,
 ): void {
   if (editor._updating) {
+    // 如果正在更新中，将更新加入队列，稍后执行
     editor._updates.push([updateFn, options]);
   } else {
+    // 否则立即开始更新
     $beginUpdate(editor, updateFn, options);
   }
 }

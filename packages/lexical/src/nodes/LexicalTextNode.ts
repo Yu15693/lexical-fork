@@ -289,19 +289,57 @@ export interface TextNode {
   getTopLevelElementOrThrow(): ElementNode;
 }
 
-/** @noInheritDoc */
+/**
+ * 【学习重点】TextNode - 文本节点
+ *
+ * TextNode 是 Lexical 中最基本的叶子节点，用于存储和渲染文本内容。
+ *
+ * 核心属性：
+ * - __text: 文本内容
+ * - __format: 格式标志位（粗体、斜体、下划线等）
+ * - __style: CSS 样式字符串
+ * - __mode: 文本模式（normal/token/segmented）
+ * - __detail: 详细标志位（directionless/unmergeable）
+ *
+ * 文本格式（__format）使用位标志：
+ * - IS_BOLD = 1
+ * - IS_ITALIC = 2
+ * - IS_STRIKETHROUGH = 4
+ * - IS_UNDERLINE = 8
+ * - IS_CODE = 16
+ * - IS_SUBSCRIPT = 32
+ * - IS_SUPERSCRIPT = 64
+ * - IS_HIGHLIGHT = 128
+ *
+ * 创建自定义 TextNode：
+ * ```ts
+ * class MentionNode extends TextNode {
+ *   __mention: string;
+ *   static getType() { return 'mention'; }
+ *   static clone(node) { return new MentionNode(node.__mention, node.__key); }
+ *   createDOM(config) {
+ *     const dom = super.createDOM(config);
+ *     dom.className = 'mention';
+ *     return dom;
+ *   }
+ * }
+ * ```
+ *
+ * @noInheritDoc
+ */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class TextNode extends LexicalNode {
   /** @internal */
   declare ['constructor']: KlassConstructor<typeof TextNode>;
+  /** 文本内容 */
   __text: string;
-  /** @internal */
+  /** @internal 格式标志位（粗体、斜体等） */
   __format: number;
-  /** @internal */
+  /** @internal CSS 样式字符串 */
   __style: string;
-  /** @internal */
+  /** @internal 文本模式：0=normal, 1=token, 2=segmented */
   __mode: 0 | 1 | 2 | 3;
-  /** @internal */
+  /** @internal 详细标志位（directionless/unmergeable） */
   __detail: number;
 
   static getType(): string {

@@ -54,7 +54,38 @@ type Props = React.PropsWithChildren<{
   initialConfig: InitialConfigType;
 }>;
 
+/**
+ * 【学习重点】LexicalComposer - React 中使用 Lexical 的入口组件
+ *
+ * 这是在 React 应用中使用 Lexical 的推荐方式。它负责：
+ * 1. 创建 LexicalEditor 实例
+ * 2. 通过 React Context 向子组件提供编辑器实例
+ * 3. 初始化编辑器状态
+ *
+ * 使用方式：
+ * ```tsx
+ * const initialConfig = {
+ *   namespace: 'MyEditor',
+ *   theme: myTheme,
+ *   nodes: [HeadingNode, ListNode, ...],
+ *   onError: (error) => console.error(error),
+ * };
+ *
+ * function MyEditor() {
+ *   return (
+ *     <LexicalComposer initialConfig={initialConfig}>
+ *       <RichTextPlugin ... />
+ *       <HistoryPlugin />
+ *       <OnChangePlugin ... />
+ *     </LexicalComposer>
+ *   );
+ * }
+ * ```
+ *
+ * 子组件可以通过 useLexicalComposerContext() 获取编辑器实例
+ */
 export function LexicalComposer({initialConfig, children}: Props): JSX.Element {
+  // 使用 useMemo 确保编辑器只创建一次
   const composerContext: [LexicalEditor, LexicalComposerContextType] = useMemo(
     () => {
       const {
@@ -66,11 +97,13 @@ export function LexicalComposer({initialConfig, children}: Props): JSX.Element {
         html,
       } = initialConfig;
 
+      // 创建 Composer Context，用于主题等配置的传递
       const context: LexicalComposerContextType = createLexicalComposerContext(
         null,
         theme,
       );
 
+      // 创建 Lexical 编辑器实例
       const editor = createEditor({
         editable: initialConfig.editable,
         html,
@@ -79,25 +112,28 @@ export function LexicalComposer({initialConfig, children}: Props): JSX.Element {
         onError: (error) => onError(error, editor),
         theme,
       });
+      // 初始化编辑器状态（可以是空、字符串、EditorState 或函数）
       initializeEditor(editor, initialEditorState);
 
       return [editor, context];
     },
 
-    // We only do this for init
+    // 只在初始化时执行一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
+  // 设置编辑器的可编辑状态
   useLayoutEffect(() => {
     const isEditable = initialConfig.editable;
     const [editor] = composerContext;
     editor.setEditable(isEditable !== undefined ? isEditable : true);
 
-    // We only do this for init
+    // 只在初始化时执行一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 通过 Context Provider 向子组件提供编辑器实例
   return (
     <LexicalComposerContext.Provider value={composerContext}>
       {children}

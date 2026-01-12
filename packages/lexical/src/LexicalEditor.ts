@@ -500,6 +500,17 @@ function initializeConversionCache(
  * consider using the appropriate abstractions, such as LexicalComposer
  * @param editorConfig - the editor configuration.
  * @returns a LexicalEditor instance
+ *
+ * 【学习重点】创建 Lexical 编辑器的核心入口函数
+ * 这是 Lexical 框架最底层的初始化 API。如果使用 React，建议使用 LexicalComposer 组件。
+ *
+ * 主要流程：
+ * 1. 解析配置参数（主题、命名空间、节点类型等）
+ * 2. 创建空的编辑器状态 (EditorState)
+ * 3. 注册内置节点类型（RootNode, TextNode, LineBreakNode, TabNode, ParagraphNode）
+ * 4. 注册用户自定义节点类型
+ * 5. 初始化编辑器实例
+ * 6. 如果提供了初始状态，则设置初始编辑器状态
  */
 export function createEditor(editorConfig?: CreateEditorArgs): LexicalEditor {
   const config = editorConfig || {};
@@ -632,6 +643,23 @@ export function createEditor(editorConfig?: CreateEditorArgs): LexicalEditor {
   return editor;
 }
 
+/**
+ * 【学习重点】LexicalEditor 类 - Lexical 编辑器的核心类
+ *
+ * 这是整个 Lexical 框架的核心，负责：
+ * 1. 管理编辑器状态 (EditorState) - 包含所有节点的不可变数据结构
+ * 2. 处理 DOM 绑定 - 将编辑器挂载到 contentEditable 元素
+ * 3. 协调更新 - 将状态变化同步到 DOM
+ * 4. 事件处理 - 监听和分发各种编辑器事件
+ * 5. 命令系统 - 提供可扩展的命令机制
+ *
+ * 核心概念：
+ * - EditorState: 不可变的编辑器状态，包含节点树和选区
+ * - Node: 编辑器内容的基本单位（TextNode, ElementNode 等）
+ * - Selection: 用户的选区状态
+ * - Command: 可监听和拦截的编辑器操作
+ * - Transform: 节点变化时的自动转换逻辑
+ */
 export class LexicalEditor {
   /** @internal */
   declare ['constructor']: KlassConstructor<typeof LexicalEditor>;
@@ -639,65 +667,65 @@ export class LexicalEditor {
   /** The version with build identifiers for this editor (since 0.17.1) */
   static version: string | undefined;
 
-  /** @internal */
+  /** @internal 是否为无头模式（不渲染 DOM） */
   _headless: boolean;
-  /** @internal */
+  /** @internal 父编辑器（用于嵌套编辑器场景） */
   _parentEditor: null | LexicalEditor;
-  /** @internal */
+  /** @internal 编辑器挂载的根 DOM 元素 */
   _rootElement: null | HTMLElement;
-  /** @internal */
+  /** @internal 当前的编辑器状态（不可变） */
   _editorState: EditorState;
-  /** @internal */
+  /** @internal 待处理的编辑器状态（更新过程中使用） */
   _pendingEditorState: null | EditorState;
-  /** @internal */
+  /** @internal 当前正在输入法组合的节点 key */
   _compositionKey: null | NodeKey;
-  /** @internal */
+  /** @internal 延迟执行的回调队列 */
   _deferred: Array<() => void>;
-  /** @internal */
+  /** @internal 节点 key 到 DOM 元素的映射 */
   _keyToDOMMap: Map<NodeKey, HTMLElement>;
-  /** @internal */
+  /** @internal 待处理的更新队列 */
   _updates: Array<[() => void, EditorUpdateOptions | undefined]>;
-  /** @internal */
+  /** @internal 是否正在更新中 */
   _updating: boolean;
-  /** @internal */
+  /** @internal 各类事件监听器 */
   _listeners: Listeners;
-  /** @internal */
+  /** @internal 命令处理器映射 */
   _commands: Commands;
-  /** @internal */
+  /** @internal 已注册的节点类型 */
   _nodes: RegisteredNodes;
-  /** @internal */
+  /** @internal 装饰器节点的渲染结果缓存 */
   _decorators: Record<NodeKey, unknown>;
-  /** @internal */
+  /** @internal 待处理的装饰器更新 */
   _pendingDecorators: null | Record<NodeKey, unknown>;
-  /** @internal */
+  /** @internal 编辑器配置 */
   _config: EditorConfig;
-  /** @internal */
+  /** @internal 脏节点类型标记（0=无脏节点, 1=有脏节点, 2=完全重新协调） */
   _dirtyType: 0 | 1 | 2;
-  /** @internal */
+  /** @internal 不需要克隆的节点集合 */
   _cloneNotNeeded: Set<NodeKey>;
-  /** @internal */
+  /** @internal 脏的叶子节点集合 */
   _dirtyLeaves: Set<NodeKey>;
-  /** @internal */
+  /** @internal 脏的元素节点映射 */
   _dirtyElements: Map<NodeKey, IntentionallyMarkedAsDirtyElement>;
-  /** @internal */
+  /** @internal 已规范化的节点集合 */
   _normalizedNodes: Set<NodeKey>;
-  /** @internal */
+  /** @internal 当前更新的标签集合 */
   _updateTags: Set<UpdateTag>;
-  /** @internal */
+  /** @internal DOM 变化观察器 */
   _observer: null | MutationObserver;
-  /** @internal */
+  /** @internal 编辑器唯一标识 */
   _key: string;
-  /** @internal */
+  /** @internal 错误处理函数 */
   _onError: ErrorHandler;
-  /** @internal */
+  /** @internal HTML 转换缓存 */
   _htmlConversions: DOMConversionCache;
-  /** @internal */
+  /** @internal 关联的 window 对象 */
   _window: null | Window;
-  /** @internal */
+  /** @internal 是否可编辑 */
   _editable: boolean;
-  /** @internal */
+  /** @internal 块级光标元素 */
   _blockCursorElement: null | HTMLDivElement;
-  /** @internal */
+  /** @internal 创建编辑器时的参数 */
   _createEditorArgs?: undefined | CreateEditorArgs;
 
   /** @internal */
@@ -1310,9 +1338,31 @@ export class LexicalEditor {
    * where Lexical editor state can be safely mutated.
    * @param updateFn - A function that has access to writable editor state.
    * @param options - A bag of options to control the behavior of the update.
+   *
+   * 【学习重点】editor.update() - 更新编辑器状态的核心方法
+   *
+   * 这是修改编辑器内容的唯一安全方式。在 updateFn 回调中：
+   * 1. 可以使用 $ 前缀的函数（如 $getRoot(), $getSelection()）
+   * 2. 可以创建、修改、删除节点
+   * 3. 可以修改选区
+   *
+   * 更新流程：
+   * 1. 克隆当前 EditorState 创建可写副本
+   * 2. 执行 updateFn 回调，修改状态
+   * 3. 运行节点 transforms
+   * 4. 协调 DOM（将虚拟节点树同步到真实 DOM）
+   * 5. 触发更新监听器
+   *
+   * 示例：
+   * editor.update(() => {
+   *   const root = $getRoot();
+   *   const paragraph = $createParagraphNode();
+   *   const text = $createTextNode('Hello');
+   *   paragraph.append(text);
+   *   root.append(paragraph);
+   * });
    */
   update(updateFn: () => void, options?: EditorUpdateOptions): void {
-    // 当 options.discrete 为 true 时，强制设置为同步执行，否则放入微任务队列异步执行
     updateEditor(this, updateFn, options);
   }
 

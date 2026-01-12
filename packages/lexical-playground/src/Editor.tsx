@@ -81,6 +81,30 @@ const skipCollaborationInit =
   // @ts-expect-error
   window.parent != null && window.parent.frames.right === window;
 
+/**
+ * 【学习重点】Editor 组件 - Playground 的主编辑器组件
+ *
+ * 这是一个完整的富文本编辑器示例，展示了如何组合各种 Lexical 插件。
+ *
+ * 组件结构：
+ * 1. ToolbarPlugin - 工具栏，提供格式化按钮
+ * 2. 内容区域：
+ *    - RichTextPlugin/PlainTextPlugin - 核心编辑区域
+ *    - 各种功能插件（列表、表格、图片、链接等）
+ * 3. TreeViewPlugin - 调试用的节点树视图
+ *
+ * 插件分类：
+ * - 核心插件：RichTextPlugin, HistoryPlugin, ListPlugin
+ * - 格式化插件：MarkdownShortcutPlugin, CodeHighlightPlugin
+ * - 嵌入插件：ImagesPlugin, YouTubePlugin, TwitterPlugin
+ * - 交互插件：DraggableBlockPlugin, FloatingLinkEditorPlugin
+ * - 协作插件：CollaborationPlugin
+ *
+ * 学习建议：
+ * 1. 先理解 RichTextPlugin 和 HistoryPlugin 的基本用法
+ * 2. 然后学习如何添加自定义节点（查看 nodes/ 目录）
+ * 3. 最后学习如何创建自定义插件（查看 plugins/ 目录）
+ */
 export default function Editor(): JSX.Element {
   const {historyState} = useSharedHistoryContext();
   const {
